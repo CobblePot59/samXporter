@@ -1,14 +1,26 @@
 # samXporter
 
-samXporter is a Python script that automates the extraction of Windows registry security hives (SAM, SYSTEM, and SECURITY) required for offline credential recovery. It handles the necessary privilege elevation and Windows API calls to backup them.
+samXporter automates the extraction of Windows registry security hives (SAM, SYSTEM, and SECURITY) required for offline credential recovery. It handles the necessary privilege elevation and Windows API calls to backup them.
+
+Available in two versions:
+- **Python version**: Portable script using Python standard library
+- **C version**: Standalone executable with no dependencies
 
 ## Requirements
 
+### Python Version
 - Windows operating system
 - Python 3.6+
 - Administrator privileges (required for hive extraction)
 
+### C Version
+- Windows operating system
+- Administrator privileges (required for hive extraction)
+- No runtime dependencies (compiled as standalone executable)
+
 ## Installation
+
+### Python Version
 
 1. Clone or download the script:
 ```bash
@@ -18,12 +30,32 @@ cd samXporter
 
 2. No additional dependencies required (uses only Python standard library)
 
+### C Version
+
+You can compile the C version using [dockompiler](https://github.com/CobblePot59/dockompiler/):
+
+```bash
+docker run --rm -v ${PWD}:/app dockompiler compile-c samXporter.c samXporter.exe -ladvapi32 -luser32 -lshell32 -lshlwapi -municode -Wall
+```
+
+This will generate a standalone `samXporter.exe` that can be run directly on Windows without any dependencies.
+
 ## Usage
+
+### Python Version
 
 Run the script with administrator privileges:
 
 ```bash
 python samXporter.py
+```
+
+### C Version
+
+Run the compiled executable with administrator privileges:
+
+```bash
+samXporter.exe
 ```
 
 ### Output
@@ -37,11 +69,26 @@ Registry_Backup/
 
 ## Extracting Credentials
 
-Once you have the backed-up hives, use `impacket-secretsdump` to extract credentials:
+Once you have the backed-up hives, you can extract credentials using one of the following methods:
+
+### Method 1: Using impacket-secretsdump (CLI)
 
 ```bash
 impacket-secretsdump -sam SAM -system SYSTEM -security SECURITY LOCAL
 ```
+
+### Method 2: Using Docker Compose (Web Interface)
+
+A web interface is available for drag-and-drop extraction of credentials.
+
+```bash
+cd secretsdump-dragdrop
+docker-compose up -d
+```
+
+Then access the web interface at `http://localhost:5000` and upload your SAM, SYSTEM, and SECURITY files.
+
+![Web Interface](.github/pictures/samXporter.png)
 
 ## Logging
 
