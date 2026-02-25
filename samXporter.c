@@ -1,13 +1,13 @@
 #include <windows.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <shlwapi.h>    // PathCombineW, PathRemoveFileSpecW
-#include <shlobj.h>     // IsUserAnAdmin
+#include <shlwapi.h>
+#include <shlobj.h>
 
 #define BACKUP_FOLDER_NAME L"Registry_Backup"
 
-BOOL EnableSeBackupPrivilege(void);
-BOOL SaveHive(const wchar_t* hive, const wchar_t* destfile);
+BOOL EnablePrivilege(const wchar_t* privName);
+BOOL SaveHive(HKEY rootKey, const wchar_t* subKey, const wchar_t* destfile);
 void PrintError(const wchar_t* msg);
 
 int wmain(void)
@@ -53,17 +53,22 @@ int wmain(void)
 
     fwprintf(stderr, L"[+] Administrator rights detected\n");
 
-    if (!EnableSeBackupPrivilege()) {
+    if (!EnablePrivilege(L"SeBackupPrivilege")) {
         fwprintf(stderr, L"[!] Failed to enable SeBackupPrivilege\n");
         return 1;
     }
-
     fwprintf(stderr, L"[+] SeBackupPrivilege enabled\n");
 
+    if (!EnablePrivilege(L"SeSecurityPrivilege")) {
+        fwprintf(stderr, L"[!] Failed to enable SeSecurityPrivilege\n");
+        return 1;
+    }
+    fwprintf(stderr, L"[+] SeSecurityPrivilege enabled\n");
+
     BOOL success = TRUE;
-    success &= SaveHive(L"HKLM\\SAM",     samPath);
-    success &= SaveHive(L"HKLM\\SYSTEM",  sysPath);
-    success &= SaveHive(L"HKLM\\SECURITY", secPath);
+    success &= SaveHive(HKEY_LOCAL_MACHINE, L"SAM",      samPath);
+    success &= SaveHive(HKEY_LOCAL_MACHINE, L"SYSTEM",   sysPath);
+    success &= SaveHive(HKEY_LOCAL_MACHINE, L"SECURITY", secPath);
 
     if (success) {
         wprintf(L"\n[+] Backup completed successfully\n");
@@ -74,7 +79,7 @@ int wmain(void)
     return success ? 0 : 1;
 }
 
-BOOL EnableSeBackupPrivilege(void)
+BOOL EnablePrivilege(const wchar_t* privName)
 {
     HANDLE hToken = NULL;
     TOKEN_PRIVILEGES tp = {0};
@@ -85,7 +90,7 @@ BOOL EnableSeBackupPrivilege(void)
         return FALSE;
     }
 
-    if (!LookupPrivilegeValueW(NULL, L"SeBackupPrivilege", &luid)) {
+    if (!LookupPrivilegeValueW(NULL, privName, &luid)) {
         PrintError(L"LookupPrivilegeValueW");
         CloseHandle(hToken);
         return FALSE;
@@ -105,45 +110,35 @@ BOOL EnableSeBackupPrivilege(void)
     return (GetLastError() != ERROR_NOT_ALL_ASSIGNED);
 }
 
-BOOL SaveHive(const wchar_t* hive, const wchar_t* destfile)
+BOOL SaveHive(HKEY rootKey, const wchar_t* subKey, const wchar_t* destfile)
 {
-    wchar_t cmd[1024];
-    STARTUPINFOW si = { sizeof(si) };
-    PROCESS_INFORMATION pi = {0};
+    if (GetFileAttributesW(destfile) != INVALID_FILE_ATTRIBUTES)
+        DeleteFileW(destfile);
 
-    swprintf_s(cmd, _countof(cmd), L"reg.exe save \"%s\" \"%s\" /y", hive, destfile);
-
-    if (!CreateProcessW(NULL, cmd, NULL, NULL, FALSE,
-                        CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT,
-                        NULL, NULL, &si, &pi))
-    {
-        PrintError(L"CreateProcessW (reg save)");
+    HKEY hKey = NULL;
+    LSTATUS ret = RegOpenKeyExW(rootKey, subKey, 0, MAXIMUM_ALLOWED, &hKey);
+    if (ret != ERROR_SUCCESS) {
+        fwprintf(stderr, L"[-] RegOpenKeyExW(%ls) failed (error %ld)\n", subKey, ret);
         return FALSE;
     }
 
-    WaitForSingleObject(pi.hProcess, INFINITE);
+    ret = RegSaveKeyExW(hKey, destfile, NULL, REG_NO_COMPRESSION);
+    RegCloseKey(hKey);
 
-    DWORD exitCode;
-    BOOL success = FALSE;
-
-    if (GetExitCodeProcess(pi.hProcess, &exitCode) && exitCode == 0) {
-        success = TRUE;
-
-        WIN32_FILE_ATTRIBUTE_DATA fad;
-        if (GetFileAttributesExW(destfile, GetFileExInfoStandard, &fad)) {
-            ULARGE_INTEGER size = { .LowPart = fad.nFileSizeLow, .HighPart = fad.nFileSizeHigh };
-            wprintf(L"[+] %-8s → %ls  (%llu bytes)\n", hive + 5, destfile, size.QuadPart);
-        } else {
-            wprintf(L"[+] %-8s → %ls\n", hive + 5, destfile);
-        }
-    } else {
-        fwprintf(stderr, L"[-] Failed to save %ls  (exit code %lu)\n", hive, exitCode);
+    if (ret != ERROR_SUCCESS) {
+        fwprintf(stderr, L"[-] RegSaveKeyExW(%ls) failed (error %ld)\n", subKey, ret);
+        return FALSE;
     }
 
-    CloseHandle(pi.hProcess);
-    CloseHandle(pi.hThread);
+    WIN32_FILE_ATTRIBUTE_DATA fad;
+    if (GetFileAttributesExW(destfile, GetFileExInfoStandard, &fad)) {
+        ULARGE_INTEGER size = { .LowPart = fad.nFileSizeLow, .HighPart = fad.nFileSizeHigh };
+        wprintf(L"[+] %-8ls → %ls  (%llu bytes)\n", subKey, destfile, size.QuadPart);
+    } else {
+        wprintf(L"[+] %-8ls → %ls\n", subKey, destfile);
+    }
 
-    return success;
+    return TRUE;
 }
 
 void PrintError(const wchar_t* msg)
