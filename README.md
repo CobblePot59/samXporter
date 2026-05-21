@@ -35,7 +35,7 @@ cd samXporter
 You can compile the C version using [dockompiler](https://github.com/CobblePot59/dockompiler/):
 
 ```bash
-docker run --rm -v ${PWD}:/app dockompiler compile-c samXporter.c samXporter.exe -ladvapi32 -luser32 -lshell32 -lshlwapi -municode -Wall
+docker run --rm -v ${PWD}:/app cobblepot59/dockompiler compile-c samXporter.c samXporter.exe -ladvapi32 -luser32 -lshell32 -lshlwapi -municode -Wall
 ```
 
 This will generate a standalone `samXporter.exe` that can be run directly on Windows without any dependencies.
