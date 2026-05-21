@@ -24,7 +24,7 @@ Available in two versions:
 
 1. Clone or download the script:
 ```bash
-git clone <repository>
+git clone https://github.com/CobblePot59/samXporter
 cd samXporter
 ```
 
